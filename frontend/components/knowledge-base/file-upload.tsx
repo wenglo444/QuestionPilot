@@ -6,15 +6,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Upload,
-  FileText,
-  X,
-  AlertCircle,
-  CheckCircle2,
-  Loader2,
-  File,
-} from "lucide-react";
+import { api, ApiError } from "@/lib/api";
 
 const ACCEPTED_TYPES = {
   "application/pdf": [".pdf"],
@@ -88,54 +80,52 @@ export function FileUpload({
         return combined;
       });
 
-      // Start upload simulation (will be replaced with real API call)
+      // Start upload via API
       if (acceptedFiles.length > 0) {
-        simulateUpload(newFiles);
+        uploadFiles(newFiles);
       }
     },
-    [maxFiles]
+    [maxFiles, projectId]
   );
 
-  const simulateUpload = (files: UploadedFile[]) => {
+  const uploadFiles = async (files: UploadedFile[]) => {
     setUploading(true);
-    files.forEach((file) => {
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += Math.random() * 15 + 5;
-        if (progress >= 100) {
-          progress = 100;
-          clearInterval(interval);
-          setUploadedFiles((prev) =>
-            prev.map((f) =>
-              f.id === file.id
-                ? { ...f, status: "success", progress: 100 }
-                : f
-            )
-          );
-          // Check if all done
-          setUploadedFiles((prev) => {
-            const allDone = prev.every(
-              (f) => f.status === "success" || f.status === "error"
-            );
-            if (allDone) {
-              setUploading(false);
-              onUploadComplete?.(
-                prev
-                  .filter((f) => f.status === "success")
-                  .map((f) => ({ id: f.id, name: f.file.name }))
-              );
-            }
-            return prev;
-          });
-        } else {
-          setUploadedFiles((prev) =>
-            prev.map((f) =>
-              f.id === file.id ? { ...f, progress: Math.round(progress) } : f
-            )
-          );
-        }
-      }, 200);
-    });
+    for (const file of files) {
+      try {
+        setUploadedFiles((prev) =>
+          prev.map((f) =>
+            f.id === file.id ? { ...f, status: "uploading" } : f
+          )
+        );
+
+        const formData = new FormData();
+        formData.append("file", file.file);
+
+        const endpoint = projectId
+          ? `/api/projects/${projectId}/documents/upload`
+          : "/api/documents/upload";
+
+        await api.upload(endpoint, formData);
+
+        setUploadedFiles((prev) =>
+          prev.map((f) =>
+            f.id === file.id ? { ...f, status: "success", progress: 100 } : f
+          )
+        );
+      } catch {
+        setUploadedFiles((prev) =>
+          prev.map((f) =>
+            f.id === file.id ? { ...f, status: "error", error: "Upload failed" } : f
+          )
+        );
+      }
+    }
+    setUploading(false);
+    onUploadComplete?.(
+      files
+        .filter((f) => f.status === "success")
+        .map((f) => ({ id: f.id, name: f.file.name }))
+    );
   };
 
   const removeFile = (id: string) => {

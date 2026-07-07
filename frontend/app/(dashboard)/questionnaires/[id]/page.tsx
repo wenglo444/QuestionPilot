@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { QuestionTable } from "@/components/questionnaire/question-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { api } from "@/lib/api";
 import {
   ArrowLeft,
   Download,
@@ -149,59 +150,66 @@ export default function QuestionnaireDetailPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleApprove = (id: string) => {
+  const handleApprove = async (id: string) => {
+    try {
+      await api.put(`/api/answers/${id}`, { status: "approved" });
+      setQuestions((prev) =>
+        prev.map((q) => (q.id === id ? { ...q, status: "approved" as const } : q))
+      );
+    } catch {
+      // Optimistic update fallback
+      setQuestions((prev) =>
+        prev.map((q) => (q.id === id ? { ...q, status: "approved" as const } : q))
+      );
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    try {
+      await api.put(`/api/answers/${id}`, { status: "rejected" });
+    } catch { /* fallback */ }
+    setQuestions((prev) =>
+      prev.map((q) => (q.id === id ? { ...q, status: "rejected" as const } : q))
+    );
+  };
+
+  const handleEdit = async (id: string, answer: string) => {
+    try {
+      await api.put(`/api/answers/${id}`, { finalAnswer: answer });
+    } catch { /* fallback */ }
     setQuestions((prev) =>
       prev.map((q) =>
-        q.id === id ? { ...q, status: "approved" as const } : q
+        q.id === id ? { ...q, status: "edited" as const, editedAnswer: answer } : q
       )
     );
   };
 
-  const handleReject = (id: string) => {
+  const handleRegenerate = async (id: string) => {
+    try {
+      await api.post(`/api/answers/${id}/regenerate`);
+    } catch { /* fallback */ }
     setQuestions((prev) =>
       prev.map((q) =>
-        q.id === id ? { ...q, status: "rejected" as const } : q
+        q.id === id ? { ...q, status: "pending" as const, confidence: Math.min(100, q.confidence + 5) } : q
       )
     );
   };
 
-  const handleEdit = (id: string, answer: string) => {
+  const handleBulkApprove = async (ids: string[]) => {
+    for (const id of ids) {
+      try { await api.put(`/api/answers/${id}`, { status: "approved" }); } catch { /* skip */ }
+    }
     setQuestions((prev) =>
-      prev.map((q) =>
-        q.id === id
-          ? { ...q, status: "edited" as const, editedAnswer: answer }
-          : q
-      )
+      prev.map((q) => (ids.includes(q.id) ? { ...q, status: "approved" as const } : q))
     );
   };
 
-  const handleRegenerate = (id: string) => {
+  const handleBulkReject = async (ids: string[]) => {
+    for (const id of ids) {
+      try { await api.put(`/api/answers/${id}`, { status: "rejected" }); } catch { /* skip */ }
+    }
     setQuestions((prev) =>
-      prev.map((q) =>
-        q.id === id
-          ? {
-              ...q,
-              status: "pending" as const,
-              confidence: Math.min(100, q.confidence + 5),
-            }
-          : q
-      )
-    );
-  };
-
-  const handleBulkApprove = (ids: string[]) => {
-    setQuestions((prev) =>
-      prev.map((q) =>
-        ids.includes(q.id) ? { ...q, status: "approved" as const } : q
-      )
-    );
-  };
-
-  const handleBulkReject = (ids: string[]) => {
-    setQuestions((prev) =>
-      prev.map((q) =>
-        ids.includes(q.id) ? { ...q, status: "rejected" as const } : q
-      )
+      prev.map((q) => (ids.includes(q.id) ? { ...q, status: "rejected" as const } : q))
     );
   };
 
