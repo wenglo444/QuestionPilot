@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.routers import projects, documents, questionnaires, answers, export, dashboard
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -20,6 +21,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register routers
+app.include_router(projects.router)
+app.include_router(documents.router)
+app.include_router(questionnaires.router)
+app.include_router(answers.router)
+app.include_router(export.router)
+app.include_router(dashboard.router)
 
 
 @app.get("/health")
