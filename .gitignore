@@ -1,0 +1,45 @@
+# QuestionPilot .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Environment
+.env
+.env.local
+*.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads
+uploads/
+!backend/app/uploads/.gitkeep
+
+# Logs
+*.log
+/logs/
+
+# Docker
+docker-data/
+
+# Node (for frontend)
+node_modules/
+.next/
+out/
