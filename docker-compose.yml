@@ -78,6 +78,32 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-placeholder-secret-change-in-production}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-placeholder}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-placeholder}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-placeholder}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-placeholder}
+      MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-common}
+      NEXT_PUBLIC_API_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
 volumes:
   postgres_data:
   uploads_data:
