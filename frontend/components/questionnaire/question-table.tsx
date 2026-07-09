@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { toast } from "sonner";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,6 +155,8 @@ export function QuestionTable({
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedEvidence, setExpandedEvidence] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const filteredQuestions = questions.filter(
     (q) =>
@@ -162,7 +165,8 @@ export function QuestionTable({
   );
 
   const pendingQuestions = questions.filter((q) => q.status === "pending");
-  const allSelected = selectedIds.size === pendingQuestions.length && pendingQuestions.length > 0;
+  const allSelected =
+    selectedIds.size === pendingQuestions.length && pendingQuestions.length > 0;
 
   const toggleSelectAll = useCallback(() => {
     if (allSelected) {
@@ -193,6 +197,7 @@ export function QuestionTable({
     onEdit?.(id, editValue);
     setEditingId(null);
     setEditValue("");
+    toast.success("Answer saved", { description: "Your edit has been applied." });
   };
 
   const handleCancelEdit = () => {
@@ -202,17 +207,109 @@ export function QuestionTable({
 
   const handleBulkApprove = () => {
     onBulkApprove?.(Array.from(selectedIds));
+    toast.success("Answers approved", {
+      description: `${selectedIds.size} answers approved.`,
+    });
     setSelectedIds(new Set());
   };
 
   const handleBulkReject = () => {
     onBulkReject?.(Array.from(selectedIds));
+    toast.error("Answers rejected", {
+      description: `${selectedIds.size} answers rejected.`,
+    });
     setSelectedIds(new Set());
+  };
+
+  const handleSingleApprove = (id: string, label: string) => {
+    onApprove?.(id);
+    toast.success("Answer approved", {
+      description: `${label} approved successfully.`,
+    });
+  };
+
+  const handleSingleReject = (id: string, label: string) => {
+    onReject?.(id);
+    toast.error("Answer rejected", {
+      description: `${label} rejected.`,
+    });
+  };
+
+  const handleRegenerate = (id: string, label: string) => {
+    onRegenerate?.(id);
+    toast.loading("Regenerating answer...", {
+      description: `${label} — AI is generating a new answer.`,
+      id: `regenerate-${id}`,
+    });
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't fire shortcuts if typing in an input/textarea
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      ) {
+        // Except "/" to focus search from anywhere
+        if (e.key === "/" && target !== searchRef.current) return;
+        return;
+      }
+
+      if (e.key === "/") {
+        e.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+
+      if (filteredQuestions.length === 0) return;
+
+      // Find current focused index from the list
+      const currentFocus =
+        focusedIndex >= 0 ? filteredQuestions[focusedIndex] : null;
+
+      if (!currentFocus) return;
+
+      const qLabel = `Q${currentFocus.number}`;
+
+      switch (e.key.toLowerCase()) {
+        case "a":
+          if (currentFocus.status === "pending") {
+            e.preventDefault();
+            handleSingleApprove(currentFocus.id, qLabel);
+          }
+          break;
+        case "r":
+          if (currentFocus.status === "pending") {
+            e.preventDefault();
+            handleSingleReject(currentFocus.id, qLabel);
+          }
+          break;
+        case "e":
+          if (editingId !== currentFocus.id) {
+            e.preventDefault();
+            handleEdit(currentFocus);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [filteredQuestions, focusedIndex, editingId]);
+
+  // Update focusedIndex when clicking a card
+  const handleCardClick = (index: number) => {
+    setFocusedIndex(index);
   };
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} />;
   if (questions.length === 0) return <EmptyState />;
+
+  const pendingCount = questions.filter((q) => q.status === "pending").length;
 
   return (
     <div className="space-y-4">
@@ -224,17 +321,38 @@ export function QuestionTable({
             {questions.length} questions ·{" "}
             {questions.filter((q) => q.status === "approved").length} approved
             {" · "}
-            {questions.filter((q) => q.status === "pending").length} pending
+            {pendingCount} pending
           </p>
+        </div>
+        {/* Keyboard shortcut hint */}
+        <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px]">
+            /
+          </span>
+          <span>search</span>
+          <span className="mx-1">·</span>
+          <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px]">
+            A
+          </span>
+          <span>approve</span>
+          <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px]">
+            R
+          </span>
+          <span>reject</span>
+          <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px]">
+            E
+          </span>
+          <span>edit</span>
         </div>
       </div>
 
       {/* Search + Bulk Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search questions..."
+            ref={searchRef}
+            placeholder="Search questions... (press / to focus)"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
@@ -269,19 +387,22 @@ export function QuestionTable({
 
       {/* Question Cards */}
       <div className="space-y-2">
-        {filteredQuestions.map((question) => {
+        {filteredQuestions.map((question, index) => {
           const status = statusConfig[question.status];
           const isEditing = editingId === question.id;
           const isExpanded = expandedEvidence === question.id;
           const isSelected = selectedIds.has(question.id);
+          const isFocused = focusedIndex === index;
 
           return (
             <Card
               key={question.id}
               className={cn(
                 "transition-all",
-                isSelected && "ring-1 ring-primary"
+                isSelected && "ring-1 ring-primary",
+                isFocused && "ring-1 ring-ring"
               )}
+              onClick={() => handleCardClick(index)}
             >
               <CardContent className="p-4">
                 {/* Question Header */}
@@ -303,6 +424,11 @@ export function QuestionTable({
                         <Badge variant="secondary" className="text-[10px]">
                           {question.section}
                         </Badge>
+                        {isFocused && (
+                          <span className="text-[10px] text-muted-foreground/60 font-mono">
+                            focused
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 text-sm font-medium leading-snug">
                         {question.question}
@@ -312,9 +438,7 @@ export function QuestionTable({
                   <div className="flex items-center gap-2">
                     <ConfidenceBadge score={question.confidence} />
                     <Badge variant={status.variant}>
-                      {status.icon && (
-                        <status.icon className="mr-1 h-3 w-3" />
-                      )}
+                      {status.icon && <status.icon className="mr-1 h-3 w-3" />}
                       {status.label}
                     </Badge>
                   </div>
@@ -384,9 +508,11 @@ export function QuestionTable({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => onApprove?.(question.id)}
+                        onClick={() =>
+                          handleSingleApprove(question.id, `Q${question.number}`)
+                        }
                         className="h-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                        title="Approve"
+                        title="Approve (A)"
                       >
                         <Check className="h-4 w-4" />
                       </Button>
@@ -395,9 +521,11 @@ export function QuestionTable({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => onReject?.(question.id)}
+                        onClick={() =>
+                          handleSingleReject(question.id, `Q${question.number}`)
+                        }
                         className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                        title="Reject"
+                        title="Reject (R)"
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -408,7 +536,7 @@ export function QuestionTable({
                         size="sm"
                         onClick={() => handleEdit(question)}
                         className="h-8"
-                        title="Edit"
+                        title="Edit (E)"
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -416,7 +544,9 @@ export function QuestionTable({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onRegenerate?.(question.id)}
+                      onClick={() =>
+                        handleRegenerate(question.id, `Q${question.number}`)
+                      }
                       className="h-8"
                       title="Regenerate"
                     >
